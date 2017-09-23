@@ -5,6 +5,7 @@ use read_elmi;
 use files;
 use cli;
 use exposed_tests;
+use generate_elm;
 
 #[derive(Debug)]
 pub enum Problem {
@@ -15,6 +16,8 @@ pub enum Problem {
     NoTestsFound(Vec<PathBuf>),
     UnexposedTests(HashMap<String, HashSet<String>>),
     NoExposedTests(bool),
+
+    WriteGeneratedCode(io::Error),
 
     // Reading elm.json
     ReadElmJson(files::ElmJsonError),
@@ -30,4 +33,5 @@ pub enum Problem {
     ReadElmi(read_elmi::Problem),
     Cli(cli::Problem),
     ExposedTest(PathBuf, exposed_tests::Problem),
+    GenerateElm(generate_elm::Problem),
 }

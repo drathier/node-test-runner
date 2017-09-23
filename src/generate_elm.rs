@@ -9,6 +9,7 @@ use std::fs::File;
 use std::fs;
 use cli::Report;
 use elm_test_path;
+use files;
 
 
 fn sanitize(string: String) -> String {
@@ -136,17 +137,21 @@ pub fn generate(
     )
 }
 
+#[derive(Debug)]
 pub enum Problem {
     JsonError(json::Error),
     GetElmTestPath(io::Error),
     InvalidGeneratedSrcDir,
+    InvalidSourceDirectory,
     InvalidElmTestSrcDir,
     MalformedElmJson,
 }
 
-pub fn generate_elm_json(generated_src: &Path, current_elm_json: &str) -> Result<String, Problem> {
-    // TODO turn current_elm_json into json
-
+pub fn generate_elm_json(
+    root: &Path,
+    generated_src: &Path,
+    current_elm_json: &str,
+) -> Result<String, Problem> {
     let mut elm_json: json::JsonValue = json::parse(&current_elm_json).map_err(Problem::JsonError)?;
 
     match elm_json.clone() {
@@ -154,7 +159,7 @@ pub fn generate_elm_json(generated_src: &Path, current_elm_json: &str) -> Result
             // TODO remove this match once random-pcg has become core's new Random!
             match elm_json_obj.get("dependencies") {
                 Some(&json::JsonValue::Object(ref obj)) => {
-                    if obj.get("mgold/elm-random-pcg").is_some() {
+                    if obj.get("mgold/elm-random-pcg").is_none() {
                         // Test.Runner.Node.App needs this to create a Seed from current timestamp
                         elm_json["dependencies"]["mgold/elm-random-pcg"] =
                             json::JsonValue::String("4.0.2 <= v < 6.0.0".to_owned());
@@ -165,10 +170,23 @@ pub fn generate_elm_json(generated_src: &Path, current_elm_json: &str) -> Result
                 }
             }
 
-            let mut source_dirs = match elm_json_obj.get("source-directories") {
-                Some(&json::JsonValue::Array(ref dirs)) => dirs.iter()
-                    .map(|src| src.to_string())
-                    .collect::<Vec<String>>(),
+            let mut source_dirs: Vec<String> = vec![];
+
+            match elm_json_obj.get("source-directories") {
+                Some(&json::JsonValue::Array(ref dirs)) => for dir in dirs {
+                    let src = root.join(dir.to_string())
+                        .canonicalize()
+                        .map_err(|_| Problem::InvalidSourceDirectory)?;
+
+                    match src.as_os_str().to_str() {
+                        Some(valid_src) => {
+                            source_dirs.push(valid_src.to_owned());
+                        }
+                        None => {
+                            return Err(Problem::InvalidSourceDirectory);
+                        }
+                    }
+                },
                 _ => {
                     return Err(Problem::MalformedElmJson);
                 }
@@ -187,7 +205,7 @@ pub fn generate_elm_json(generated_src: &Path, current_elm_json: &str) -> Result
             // Include node-test-runner's src directory, to allow access to the Runner code.
             match elm_test_path::get()
                 .map_err(Problem::GetElmTestPath)?
-                .join(PathBuf::from("src"))
+                .with_file_name("src")
                 .as_os_str()
                 .to_str()
             {
@@ -208,14 +226,27 @@ pub fn generate_elm_json(generated_src: &Path, current_elm_json: &str) -> Result
     }
 }
 
-
-pub fn write(generated_src: &Path, module_name: &str, contents: &str) -> io::Result<usize> {
+pub fn write(
+    generated_src: &Path,
+    module_name: &str,
+    generated_elm_code: &str,
+    generated_code_dir: &Path,
+    generated_elm_json: &str,
+) -> io::Result<usize> {
+    // Create the directories we'll need.
     let main_dir = generated_src.to_path_buf().join("Test").join("Generated");
 
     fs::create_dir_all(&main_dir)?;
 
+    // Write Main.elm
     let main_file_path = main_dir.join(module_name.to_owned() + ".elm");
-    let mut file: File = File::create(main_file_path)?;
+    let mut main_file: File = File::create(main_file_path)?;
 
-    file.write(contents.as_bytes())
+    main_file.write(generated_elm_code.as_bytes())?;
+
+    // Write elm.json
+    let elm_json_path = generated_code_dir.join(files::ELM_JSON_FILENAME);
+    let mut elm_json_file: File = File::create(elm_json_path)?;
+
+    elm_json_file.write(generated_elm_json.as_bytes())
 }

@@ -4,9 +4,15 @@ use read_elmi;
 use files::ElmJsonError;
 use cli;
 use exposed_tests;
+use generate_elm;
+use files;
 
 pub fn report(problem: Problem) -> String {
     match problem {
+        Problem::WriteGeneratedCode(_) => String::from(
+            "Unable to write generated Elm code. Maybe your elm-stuff directory has \
+             a permissions problem?",
+        ),
         Problem::MissingElmJson => format!(
             "elm-test could not find an elm.json file in this directory \
              or any parent directories.\n{}",
@@ -166,6 +172,34 @@ pub fn report(problem: Problem) -> String {
                  some initial tests to get things going, run elm-test init",
             )
         },
+        Problem::GenerateElm(generate_elm::Problem::JsonError(_)) => format!(
+            "Error when trying to generate {} - the original {} had JSON syntax errors. \
+             Try running `elm make` manually to see if it gives you an error.",
+            files::ELM_JSON_FILENAME,
+            files::ELM_JSON_FILENAME
+        ),
+        Problem::GenerateElm(generate_elm::Problem::InvalidSourceDirectory) => format!(
+            "Error when trying to generate {} - encountered invalid source directory.",
+            files::ELM_JSON_FILENAME,
+        ),
+        Problem::GenerateElm(generate_elm::Problem::GetElmTestPath(_)) => {
+            String::from("Unable to determine the current elm-test path.")
+        }
+
+        Problem::GenerateElm(generate_elm::Problem::InvalidGeneratedSrcDir) => {
+            String::from("Invalid generated source directory.")
+        }
+
+        Problem::GenerateElm(generate_elm::Problem::InvalidElmTestSrcDir) => String::from(
+            "Invalid elm-test source directory. Maybe elm-test was installed to a\
+             strange location which the elm-test executable cannot access?",
+        ),
+        Problem::GenerateElm(generate_elm::Problem::MalformedElmJson) => format!(
+            "Error when trying to generate {} - the original {} contained invalid JSON. \
+             Try running `elm make` manually to see if it gives you an error.",
+            files::ELM_JSON_FILENAME,
+            files::ELM_JSON_FILENAME
+        ),
     }
 }
 

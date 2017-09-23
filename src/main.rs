@@ -75,6 +75,9 @@ fn run() -> Result<(), Problem> {
         .spawn()
         .map_err(Problem::SpawnElmMake)?;
 
+    let elm_json_contents: String =
+        files::read_elm_json(root.as_path()).map_err(Problem::ReadElmJson)?;
+
     // TODO we can do these next two things in parallel!
 
     // TODO [Thread 1] Determine what values each module exposes.
@@ -92,7 +95,7 @@ fn run() -> Result<(), Problem> {
     }
 
     // TODO [Thread 2] Determine what our valid module names are.
-    let source_dirs = files::read_source_dirs(root.as_path()).map_err(Problem::ReadElmJson)?;
+    let source_dirs = files::read_source_dirs(&elm_json_contents).map_err(Problem::ReadElmJson)?;
     let possible_module_names = files::possible_module_names(&test_files, &source_dirs);
 
     elm_make_process
@@ -124,11 +127,11 @@ fn run() -> Result<(), Problem> {
 
     let supports_color = true; // TODO auto-detect this.
     let num_processes: usize = num_cpus::get();
-    let generated_code = root.join("elm-stuff")
+    let generated_code_dir = root.join("elm-stuff")
         .join("generated-code")
         .join("elm-community")
         .join("elm-test");
-    let generated_src = generated_code.join("src");
+    let generated_src = generated_code_dir.join("src");
 
     let (module_name, generated_elm_code) = generate_elm::generate(
         &tests_by_module,
@@ -140,7 +143,20 @@ fn run() -> Result<(), Problem> {
         &args.file_paths,
     );
 
-    generate_elm::write(&generated_src, &module_name, &generated_elm_code);
+    // TODO write into this from a file.
+    let generated_elm_json = generate_elm::generate_elm_json(
+        &root.join("tests"), // TODO this is a hack for 0.18!
+        &generated_src,
+        &elm_json_contents,
+    ).map_err(Problem::GenerateElm)?;
+
+    generate_elm::write(
+        &generated_src,
+        &module_name,
+        &generated_elm_code,
+        &generated_code_dir,
+        &generated_elm_json,
+    ).map_err(Problem::WriteGeneratedCode)?;
 
     // Spin up node processes.
     // let mut node_processes: Vec<std::process::Child> = Vec::new();
