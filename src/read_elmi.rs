@@ -1,13 +1,11 @@
-
 extern crate json;
 
-use std;
 use std::io;
-use std::fs;
-use std::io::{Read, BufReader};
-use std::path::{PathBuf, Path};
-use std::collections::{HashSet, HashMap};
-use std::process::{Command, Child, Stdio};
+use std::io::{BufReader, Read};
+use std::path::{Path, PathBuf};
+use std::collections::{HashMap, HashSet};
+use std::process::{Child, Command, Stdio};
+use elm_test_path;
 
 #[derive(Debug)]
 pub enum Problem {
@@ -26,12 +24,9 @@ pub fn read_test_interfaces(
     root: &Path,
     possible_module_names: &HashMap<String, PathBuf>,
 ) -> Result<HashMap<String, (PathBuf, HashSet<String>)>, Problem> {
-    // Get the path to the currently executing elm-test binary. This may be a symlink.
-    let path_to_elm_test_binary: PathBuf = std::env::current_exe().map_err(Problem::CurrentExe)?;
-
-    // If it's a symlink, follow it. Then change the executable name to elm-interface-to-json.
-    let path_to_elmi_to_json_binary: PathBuf = fs::read_link(&path_to_elm_test_binary)
-        .unwrap_or(path_to_elm_test_binary)
+    // Get the path to elm-test. Then change the executable name to elm-interface-to-json.
+    let path_to_elmi_to_json_binary: PathBuf = elm_test_path::get()
+        .map_err(Problem::CurrentExe)?
         .with_file_name(ELMI_TO_JSON_BINARY_NAME);
 
     // Now that we've run `elm make` to compile the .elmi files, run elm-interface-to-json to
@@ -45,9 +40,9 @@ pub fn read_test_interfaces(
 
     let tests_by_module = read_json(&mut elmi_to_json_process, possible_module_names);
 
-    elmi_to_json_process.wait().map_err(
-        Problem::CompilationFailed,
-    )?;
+    elmi_to_json_process
+        .wait()
+        .map_err(Problem::CompilationFailed)?;
 
     Ok(tests_by_module?)
 }
@@ -63,9 +58,9 @@ fn read_json(
             let mut json_output = String::new();
 
             // Populate json_output with the stdout coming from elm-interface-to-json
-            buf_reader.read_to_string(&mut json_output).map_err(
-                Problem::ReadElmiToJson,
-            )?;
+            buf_reader
+                .read_to_string(&mut json_output)
+                .map_err(Problem::ReadElmiToJson)?;
 
             parse_json(&json_output, possible_module_names)
         }
@@ -112,10 +107,10 @@ fn parse_json(
                             // to get an entry in the map.
                             if !top_level_tests.is_empty() {
                                 // Add this module to the map, along with its values.
-                                tests_by_module.insert(module_name.to_owned(), (
-                                    test_path.clone(),
-                                    top_level_tests,
-                                ));
+                                tests_by_module.insert(
+                                    module_name.to_owned(),
+                                    (test_path.clone(), top_level_tests),
+                                );
                             }
                         }
                     }

@@ -1,12 +1,14 @@
+extern crate json;
 extern crate murmur3;
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::collections::{HashSet, HashMap};
-use cli::Report;
+use std::collections::{HashMap, HashSet};
 use std::io::Write;
 use std::fs::File;
 use std::fs;
+use cli::Report;
+use elm_test_path;
 
 
 fn sanitize(string: String) -> String {
@@ -20,13 +22,11 @@ fn get_report_code(report: &Report, supports_color: bool) -> String {
     match report {
         &Report::Json => "JsonReport",
         &Report::JUnit => "JUnitReport",
-        &Report::Console => {
-            if supports_color {
-                "(ConsoleReport UseColor)"
-            } else {
-                "(ConsoleReport Monochrome)"
-            }
-        }
+        &Report::Console => if supports_color {
+            "(ConsoleReport UseColor)"
+        } else {
+            "(ConsoleReport Monochrome)"
+        },
     }.to_owned()
 }
 
@@ -52,7 +52,6 @@ pub fn generate(
                 format!(
                     "Test.describe \"{}\"\n        [ {}\n        ]",
                     module_name,
-
                     test_names
                         .iter()
                         .map(|test_name| format!("{}.{}", module_name, test_name))
@@ -63,14 +62,12 @@ pub fn generate(
         })
         .unzip();
 
-    let fuzz: String = fuzz_opt.map(|num| format!("Just {}", num)).unwrap_or(
-        "Nothing"
-            .to_owned(),
-    );
-    let seed: String = seed_opt.map(|num| format!("Just {}", num)).unwrap_or(
-        "Nothing"
-            .to_owned(),
-    );
+    let fuzz: String = fuzz_opt
+        .map(|num| format!("Just {}", num))
+        .unwrap_or("Nothing".to_owned());
+    let seed: String = seed_opt
+        .map(|num| format!("Just {}", num))
+        .unwrap_or("Nothing".to_owned());
     let report: String = get_report_code(report_opt, supports_color);
     let paths = file_path_opts
         .iter()
@@ -138,6 +135,79 @@ pub fn generate(
         ),
     )
 }
+
+pub enum Problem {
+    JsonError(json::Error),
+    GetElmTestPath(io::Error),
+    InvalidGeneratedSrcDir,
+    InvalidElmTestSrcDir,
+    MalformedElmJson,
+}
+
+pub fn generate_elm_json(generated_src: &Path, current_elm_json: &str) -> Result<String, Problem> {
+    // TODO turn current_elm_json into json
+
+    let mut elm_json: json::JsonValue = json::parse(&current_elm_json).map_err(Problem::JsonError)?;
+
+    match elm_json.clone() {
+        json::JsonValue::Object(elm_json_obj) => {
+            // TODO remove this match once random-pcg has become core's new Random!
+            match elm_json_obj.get("dependencies") {
+                Some(&json::JsonValue::Object(ref obj)) => {
+                    if obj.get("mgold/elm-random-pcg").is_some() {
+                        // Test.Runner.Node.App needs this to create a Seed from current timestamp
+                        elm_json["dependencies"]["mgold/elm-random-pcg"] =
+                            json::JsonValue::String("4.0.2 <= v < 6.0.0".to_owned());
+                    }
+                }
+                _ => {
+                    return Err(Problem::MalformedElmJson);
+                }
+            }
+
+            let mut source_dirs = match elm_json_obj.get("source-directories") {
+                Some(&json::JsonValue::Array(ref dirs)) => dirs.iter()
+                    .map(|src| src.to_string())
+                    .collect::<Vec<String>>(),
+                _ => {
+                    return Err(Problem::MalformedElmJson);
+                }
+            };
+
+            // Include elm-stuff/generated-sources - since we'll be generating sources in there.
+            match generated_src.as_os_str().to_str() {
+                Some(source_dir) => {
+                    source_dirs.push(source_dir.to_owned());
+                }
+                None => {
+                    return Err(Problem::InvalidGeneratedSrcDir);
+                }
+            }
+
+            // Include node-test-runner's src directory, to allow access to the Runner code.
+            match elm_test_path::get()
+                .map_err(Problem::GetElmTestPath)?
+                .join(PathBuf::from("src"))
+                .as_os_str()
+                .to_str()
+            {
+                Some(source_dir) => {
+                    source_dirs.push(source_dir.to_owned());
+                }
+                None => {
+                    return Err(Problem::InvalidElmTestSrcDir);
+                }
+            }
+
+            elm_json["source-directories"] = json::JsonValue::from(source_dirs);
+
+            Ok(json::stringify_pretty(elm_json, 4))
+        }
+
+        _ => Err(Problem::MalformedElmJson),
+    }
+}
+
 
 pub fn write(generated_src: &Path, module_name: &str, contents: &str) -> io::Result<usize> {
     let main_dir = generated_src.to_path_buf().join("Test").join("Generated");

@@ -2,7 +2,6 @@ extern crate clap;
 
 use clap::{App, Arg};
 use std::path::{Path, PathBuf};
-use std::collections::HashSet;
 use std::iter::FromIterator;
 
 // Use the version number in Cargo.toml
@@ -97,16 +96,14 @@ pub fn parse_int_arg<'a>(
 ) -> Result<Option<u64>, Problem> {
     match args.value_of("--".to_owned() + flag_name) {
         None => Ok(None),
-        Some(potential_num) => {
-            match potential_num.parse::<u64>() {
-                Ok(num) => Ok(Some(num)),
+        Some(potential_num) => match potential_num.parse::<u64>() {
+            Ok(num) => Ok(Some(num)),
 
-                Err(_) => Err(Problem::InvalidInteger(
-                    String::from(flag_name),
-                    String::from(potential_num),
-                )),
-            }
-        }
+            Err(_) => Err(Problem::InvalidInteger(
+                String::from(flag_name),
+                String::from(potential_num),
+            )),
+        },
     }
 }
 
@@ -115,19 +112,15 @@ pub fn elm_binary_path_from_compiler_flag(
     compiler_flag: Option<String>,
 ) -> Result<PathBuf, Problem> {
     match compiler_flag {
-        Some(string) => {
-            match PathBuf::from(string.as_str()).canonicalize() {
-                Ok(path_to_elm_binary) => {
-                    if path_to_elm_binary.is_dir() {
-                        Err(Problem::InvalidCompilerFlag(string))
-                    } else {
-                        Ok(path_to_elm_binary)
-                    }
-                }
+        Some(string) => match PathBuf::from(string.as_str()).canonicalize() {
+            Ok(path_to_elm_binary) => if path_to_elm_binary.is_dir() {
+                Err(Problem::InvalidCompilerFlag(string))
+            } else {
+                Ok(path_to_elm_binary)
+            },
 
-                Err(_) => Err(Problem::InvalidCompilerFlag(string)),
-            }
-        }
+            Err(_) => Err(Problem::InvalidCompilerFlag(string)),
+        },
         None => Ok(PathBuf::from("elm")),
     }
 }

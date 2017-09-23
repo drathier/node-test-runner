@@ -1,6 +1,6 @@
 use std::io;
 use std::path::PathBuf;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use read_elmi;
 use files;
 use cli;

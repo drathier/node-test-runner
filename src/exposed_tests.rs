@@ -1,10 +1,10 @@
 // Determine which values of type Test are exposed from a given module.
 
 use std::fs::File;
-use std::io::{BufReader, BufRead};
+use std::io::{BufRead, BufReader};
 use io;
 use std::path::{Path, PathBuf};
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 #[derive(Debug)]
 pub enum Problem {
@@ -50,9 +50,9 @@ fn read_exposing(file: &File) -> Result<HashSet<String>, Problem> {
 
     loop {
         let mut line = String::new();
-        reader.read_line(&mut line).map_err(|err| {
-            Problem::ReadingFileForExports(err)
-        })?;
+        reader
+            .read_line(&mut line)
+            .map_err(|err| Problem::ReadingFileForExports(err))?;
 
         if line.is_empty() {
             return Err(Problem::ParseError);
@@ -146,7 +146,7 @@ mod test_read_exposing {
     extern crate tempfile;
 
     use super::*;
-    use std::io::{Write, Seek, SeekFrom};
+    use std::io::{Seek, SeekFrom, Write};
 
     fn read_with(contents: &str) -> Result<HashSet<String>, Problem> {
         let mut file: File = tempfile::tempfile().unwrap();
@@ -170,7 +170,6 @@ mod test_read_exposing {
             read_with("module Foo exposing (..)").unwrap(),
             hash_set(vec![".."])
         );
-
     }
 
     #[test]

@@ -5,7 +5,7 @@ use std::env;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 use problems::Problem;
 
@@ -15,6 +15,7 @@ mod read_elmi;
 mod error_messages;
 mod problems;
 mod exposed_tests;
+mod elm_test_path;
 mod generate_elm;
 
 fn main() {
@@ -43,13 +44,12 @@ fn run() -> Result<(), Problem> {
 
     // Parse and validate CLI arguments
     let args = cli::parse_args().map_err(Problem::Cli)?;
-    let unique_file_paths: HashSet<PathBuf> =
-        HashSet::from_iter(args.file_paths.iter().map(
-            |file_path| file_path.to_path_buf(),
-        ));
-    let test_files = match gather_test_files(&unique_file_paths).map_err(
-        Problem::ReadTestFiles,
-    )? {
+    let unique_file_paths: HashSet<PathBuf> = HashSet::from_iter(
+        args.file_paths
+            .iter()
+            .map(|file_path| file_path.to_path_buf()),
+    );
+    let test_files = match gather_test_files(&unique_file_paths).map_err(Problem::ReadTestFiles)? {
         Some(valid_files) => valid_files,
 
         None => {
@@ -57,8 +57,8 @@ fn run() -> Result<(), Problem> {
         }
     };
 
-    let path_to_elm_binary: PathBuf = cli::elm_binary_path_from_compiler_flag(args.compiler)
-        .map_err(Problem::Cli)?;
+    let path_to_elm_binary: PathBuf =
+        cli::elm_binary_path_from_compiler_flag(args.compiler).map_err(Problem::Cli)?;
 
     // Print the headline. Something like:
     //
@@ -92,14 +92,12 @@ fn run() -> Result<(), Problem> {
     }
 
     // TODO [Thread 2] Determine what our valid module names are.
-    let source_dirs = files::read_source_dirs(root.as_path()).map_err(
-        Problem::ReadElmJson,
-    )?;
+    let source_dirs = files::read_source_dirs(root.as_path()).map_err(Problem::ReadElmJson)?;
     let possible_module_names = files::possible_module_names(&test_files, &source_dirs);
 
-    elm_make_process.wait_with_output().map_err(
-        Problem::CompilationFailed,
-    )?;
+    elm_make_process
+        .wait_with_output()
+        .map_err(Problem::CompilationFailed)?;
 
     let test_paths_by_module: HashMap<String, (PathBuf, HashSet<String>)> =
         read_elmi::read_test_interfaces(root.as_path(), &possible_module_names)
@@ -111,10 +109,9 @@ fn run() -> Result<(), Problem> {
 
     // TODO [Thread 1 + Thread 2] Join threads; we now have the info we need to do elm make round 2.
     let tests_by_module: HashMap<String, HashSet<String>> =
-        HashMap::from_iter(test_paths_by_module.clone().iter().map(|(module_name,
-          &(_, ref tests))| {
-            (module_name.clone(), tests.clone())
-        }));
+        HashMap::from_iter(test_paths_by_module.clone().iter().map(
+            |(module_name, &(_, ref tests))| (module_name.clone(), tests.clone()),
+        ));
 
     let unexposed_tests =
         exposed_tests::get_unexposed_tests(test_paths_by_module, exposed_values_by_file);
@@ -177,9 +174,9 @@ fn gather_test_files(values: &HashSet<PathBuf>) -> io::Result<Option<HashSet<Pat
     if values.is_empty() {
         files::gather_all(
             results,
-            [DEFAULT_TEST_FILES_ARGUMENT].iter().map(|&str| {
-                Path::new(str).to_path_buf()
-            }),
+            [DEFAULT_TEST_FILES_ARGUMENT]
+                .iter()
+                .map(|&str| Path::new(str).to_path_buf()),
         )?;
     } else {
         files::gather_all(results, values.clone().into_iter())?;

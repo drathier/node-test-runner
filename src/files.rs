@@ -5,9 +5,9 @@ use std::io::Read;
 
 use std::fs;
 use std::fs::File;
-use std::path::{PathBuf, Path, Component};
+use std::path::{Component, Path, PathBuf};
 use std::ffi::OsStr;
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 const ELM_JSON_FILENAME: &str = "elm-package.json";
 
@@ -223,19 +223,19 @@ pub enum ElmJsonError {
 }
 
 pub fn read_source_dirs(root: &Path) -> Result<HashSet<PathBuf>, ElmJsonError> {
-    let mut file = File::open(root
+    let mut file = File::open(
+        root
         // TODO don't join with tests/ - this is a hack for 0.18!
         .join(PathBuf::from("tests"))
-        .join(PathBuf::from(ELM_JSON_FILENAME))).map_err(ElmJsonError::OpenElmJson)?;
+        .join(PathBuf::from(ELM_JSON_FILENAME)),
+    ).map_err(ElmJsonError::OpenElmJson)?;
     let mut file_contents = String::new();
 
-    file.read_to_string(&mut file_contents).map_err(
-        ElmJsonError::ReadElmJson,
-    )?;
+    file.read_to_string(&mut file_contents)
+        .map_err(ElmJsonError::ReadElmJson)?;
 
-    let elm_json: json::JsonValue = json::parse(&file_contents).map_err(
-        ElmJsonError::ParseElmJson,
-    )?;
+    let elm_json: json::JsonValue =
+        json::parse(&file_contents).map_err(ElmJsonError::ParseElmJson)?;
 
     match elm_json {
         json::JsonValue::Object(obj) => {
@@ -247,7 +247,8 @@ pub fn read_source_dirs(root: &Path) -> Result<HashSet<PathBuf>, ElmJsonError> {
                         // TODO don't join with tests/ - this is a hack for 0.18!
                         match PathBuf::from("tests")
                             .join(source_dir.to_string())
-                            .canonicalize() {
+                            .canonicalize()
+                        {
                             Ok(path) => {
                                 paths.insert(path);
                             }
