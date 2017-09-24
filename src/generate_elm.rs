@@ -1,5 +1,5 @@
 extern crate json;
-extern crate murmur3;
+extern crate twox_hash;
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -11,12 +11,15 @@ use cli::Report;
 use elm_test_path;
 use files;
 
+use std::collections::hash_map::DefaultHasher;
+use std::hash::Hasher;
+
 
 fn sanitize(string: String) -> String {
     format!("\"{}\"", string.replace("\\", "\\\\").replace("\"", "\\\""))
 }
 
-const MURMUR3_SEED: u32 = 8675309;
+const HASH_SEED: u64 = 8675309;
 
 
 fn get_report_code(report: &Report, supports_color: bool) -> String {
@@ -118,11 +121,11 @@ pub fn generate(
     // and then re-run `elm-test Foo.elm` we still have a cached `Main` for
     // `Foo.elm` (assuming none of its necessary imports have changed - and
     // why would they?) so we don't have to recompile it.
-    let mut salt = test_file_body.as_bytes();
+    let mut hasher = twox_hash::XxHash::with_seed(HASH_SEED);
 
-    murmur3::murmur3_32(&mut salt, MURMUR3_SEED);
+    hasher.write(test_file_body.as_bytes());
 
-    let module_name = format!("Main{}", String::from_utf8_lossy(salt));
+    let module_name = format!("Main{:x}", hasher.finish());
 
     // We'll be putting the generated Main in something like this:
     //
