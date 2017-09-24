@@ -67,7 +67,7 @@ fn run() -> Result<(), Problem> {
     print_headline();
 
     // Start `elm make` running.
-    let elm_make_process = Command::new(path_to_elm_binary)
+    let elm_make_precompile_process = Command::new(&path_to_elm_binary)
         .arg("make")
         .arg("--yes")
         .arg("--output=/dev/null")
@@ -98,7 +98,7 @@ fn run() -> Result<(), Problem> {
     let source_dirs = files::read_source_dirs(&elm_json_contents).map_err(Problem::ReadElmJson)?;
     let possible_module_names = files::possible_module_names(&test_files, &source_dirs);
 
-    elm_make_process
+    elm_make_precompile_process
         .wait_with_output()
         .map_err(Problem::CompilationFailed)?;
 
@@ -143,20 +143,32 @@ fn run() -> Result<(), Problem> {
         &args.file_paths,
     );
 
-    // TODO write into this from a file.
     let generated_elm_json = generate_elm::generate_elm_json(
         &root.join("tests"), // TODO this is a hack for 0.18!
         &generated_src,
         &elm_json_contents,
     ).map_err(Problem::GenerateElm)?;
 
-    generate_elm::write(
+    let path_to_main_elm = generate_elm::write(
         &generated_src,
         &module_name,
         &generated_elm_code,
         &generated_code_dir,
         &generated_elm_json,
     ).map_err(Problem::WriteGeneratedCode)?;
+
+    // Start `elm make` running.
+    let output_js_path = ""; // TODO
+    let elm_make_process = Command::new(&path_to_elm_binary)
+        .arg("make")
+        .arg("--yes")
+        .arg(format!("--output={}", output_js_path))
+        .args(&path_to_main_elm)
+        .spawn()
+        .map_err(Problem::SpawnElmMake)?;
+
+    // TODO port over the "translate repositories into package qualifiers" logic.
+    // TODO hack testOutput.js to include the native stuff.
 
     // Spin up node processes.
     // let mut node_processes: Vec<std::process::Child> = Vec::new();

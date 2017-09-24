@@ -11,7 +11,6 @@ use cli::Report;
 use elm_test_path;
 use files;
 
-use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
 
 
@@ -235,7 +234,7 @@ pub fn write(
     generated_elm_code: &str,
     generated_code_dir: &Path,
     generated_elm_json: &str,
-) -> io::Result<usize> {
+) -> io::Result<PathBuf> {
     // Create the directories we'll need.
     let main_dir = generated_src.to_path_buf().join("Test").join("Generated");
 
@@ -243,13 +242,15 @@ pub fn write(
 
     // Write Main.elm
     let main_file_path = main_dir.join(module_name.to_owned() + ".elm");
-    let mut main_file: File = File::create(main_file_path)?;
+    let mut main_file: File = File::create(&main_file_path)?;
 
     main_file.write(generated_elm_code.as_bytes())?;
 
     // Write elm.json
     let elm_json_path = generated_code_dir.join(files::ELM_JSON_FILENAME);
-    let mut elm_json_file: File = File::create(elm_json_path)?;
+    let mut elm_json_file: File = File::create(&elm_json_path)?;
 
-    elm_json_file.write(generated_elm_json.as_bytes())
+    elm_json_file.write(generated_elm_json.as_bytes())?;
+
+    Ok(main_file_path)
 }
