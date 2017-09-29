@@ -1,4 +1,5 @@
 extern crate json;
+extern crate regex;
 extern crate twox_hash;
 
 use std::io;
@@ -253,4 +254,59 @@ pub fn write(
     elm_json_file.write(generated_elm_json.as_bytes())?;
 
     Ok(main_file_path)
+}
+
+pub fn native_name_from_repository(repo: &str) -> Result<String, RepoNameProblem> {
+    // https://github.com/rtfeldman/node-test-runner.git
+    //
+    // matches[1] = "rtfeldman"
+    // matches[2] = "node-test-runner"
+    lazy_static! {
+        static ref REGEX: regex::Regex = regex::Regex::new(r"/([^/]+)/([^/]+)[.]git$").unwrap();
+    }
+
+
+    let captures = match REGEX.captures(repo) {
+        Some(valid_captures) => valid_captures,
+        None => {
+            return Err(RepoNameProblem::MalformedRepo(repo.to_owned()));
+        }
+    };
+
+    let user_name = &captures[1];
+    let repo_name = &captures[2];
+
+    //"A dot in repository name breaks `elm-make`" https://github.com/elm-lang/elm-make/issues/106
+    if user_name.contains(".") || repo_name.contains(".") {
+        //"Elm currently doesn't support having periods in the user/project part of the repository field of elm-package.json. Aborting test run.";
+        return Err(RepoNameProblem::RepoHasDots(repo.to_owned()));
+    }
+
+    // From the above example, return "rtfeldman$node_test_runner"
+    Ok(
+        [user_name, repo_name]
+            .iter()
+            .map(|&name| name.to_owned().replace("-", "_"))
+            .collect::<Vec<String>>()
+            .join("$"),
+    )
+}
+
+#[derive(Debug, PartialEq)]
+pub enum RepoNameProblem {
+    MalformedRepo(String),
+    RepoHasDots(String),
+}
+
+#[cfg(test)]
+mod native_name_from_repository_tests {
+    use super::*;
+
+    #[test]
+    fn test_example() {
+        assert_eq!(
+            native_name_from_repository("https://github.com/rtfeldman/node-test-runner.git"),
+            Ok("rtfeldman$node_test_runner".to_owned())
+        );
+    }
 }
